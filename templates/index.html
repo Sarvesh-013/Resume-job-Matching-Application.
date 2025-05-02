@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Uploader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 600px;
+            margin-top: 50px;
+        }
+        .alert {
+            display: none;
+        }
+        #progressTable {
+            margin-top: 20px;
+        }
+        #spinner {
+            display: none;
+        }
+        .btn-clear {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Resume Uploader</h1>
+        <a href="/results" class="btn btn-primary mb-3">View Dashboard</a>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="files" class="form-label">Upload Resumes (PDF, DOCX, TXT, multiple allowed)</label>
+                <input type="file" class="form-control" id="files" name="files" accept=".pdf,.docx,.txt" multiple required>
+            </div>
+            <div class="d-flex">
+                <button type="submit" class="btn btn-primary w-100" id="submitBtn">Upload and Process</button>
+                <button type="button" class="btn btn-secondary btn-clear" id="clearStatus">Clear Status</button>
+            </div>
+            <div id="spinner" class="spinner-border mt-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </form>
+        <div id="alertBox" class="alert mt-3" role="alert"></div>
+        <div id="progressTable" class="table-responsive" style="display: none;">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="progressTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const socket = io('http://localhost:5001', {
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000
+        });
+        let uploadedFiles = {};
+
+        socket.on('connect', () => {
+            console.log('Connected to SocketIO server');
+            document.getElementById('alertBox').style.display = 'none';
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('SocketIO connection error:', error);
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = 'alert alert-danger mt-3';
+            alertBox.textContent = 'Failed to connect to server. Please ensure the application is running on port 5001.';
+            alertBox.style.display = 'block';
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const alertBox = document.getElementById('alertBox');
+            const submitBtn = document.getElementById('submitBtn');
+            const spinner = document.getElementById('spinner');
+            alertBox.style.display = 'none';
+            alertBox.className = 'alert mt-3';
+            submitBtn.disabled = true;
+            spinner.style.display = 'block';
+
+            const files = document.getElementById('files').files;
+            if (files.length === 0) {
+                alertBox.className = 'alert alert-danger mt-3';
+                alertBox.textContent = 'Please select at least one file';
+                alertBox.style.display = 'block';
+                submitBtn.disabled = false;
+                spinner.style.display = 'none';
+                return;
+            }
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alertBox.className = 'alert alert-success mt-3';
+                    alertBox.textContent = result.message + ` (${result.file_paths.length} files uploaded)`;
+                } else {
+                    alertBox.className = 'alert alert-danger mt-3';
+                    alertBox.textContent = result.error || 'Upload failed';
+                }
+                alertBox.style.display = 'block';
+                form.reset();
+            } catch (error) {
+                alertBox.className = 'alert alert-danger mt-3';
+                alertBox.textContent = 'Error: ' + error.message;
+                alertBox.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        });
+
+        function updateProgressTable() {
+            const tbody = document.getElementById('progressTableBody');
+            tbody.innerHTML = '';
+            Object.entries(uploadedFiles).forEach(([path, info]) => {
+                const row = document.createElement('tr');
+                let details = '';
+                if (info.status === 'completed' && info.data) {
+                    const jobs = info.data.job_predictions && info.data.job_predictions.length ? 
+                        info.data.job_predictions.map(j => `${j.job} (${j.score}%)`).join(', ') : 'No predictions';
+                    details = `Name: ${info.data.name || 'None'}, Jobs: ${jobs}`;
+                } else if (info.status === 'failed') {
+                    details = `Error: ${info.error || 'Unknown'}`;
+                }
+                row.innerHTML = `
+                    <td>${info.filename}</td>
+                    <td>${info.status.charAt(0).toUpperCase() + info.status.slice(1)}</td>
+                    <td>${details}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            document.getElementById('progressTable').style.display = Object.keys(uploadedFiles).length ? 'block' : 'none';
+        }
+
+        socket.on('upload_status', (data) => {
+            if (data.file_paths) {
+                data.file_paths.forEach(path => {
+                    uploadedFiles[path] = {
+                        status: data.status,
+                        filename: data.filenames[path]
+                    };
+                });
+            } else if (data.file_path) {
+                uploadedFiles[data.file_path] = uploadedFiles[data.file_path] || {};
+                uploadedFiles[data.file_path].status = data.status;
+                uploadedFiles[data.file_path].filename = data.filename;
+                if (data.status === 'completed') {
+                    uploadedFiles[data.file_path].data = data.data;
+                } else if (data.status === 'failed') {
+                    uploadedFiles[data.file_path].error = data.error;
+                }
+            }
+            updateProgressTable();
+        });
+
+        socket.on('resume_processing', (data) => {
+            if (data.file_path) {
+                uploadedFiles[data.file_path] = uploadedFiles[data.file_path] || {};
+                uploadedFiles[data.file_path].status = 'processing';
+                uploadedFiles[data.file_path].filename = data.filename;
+                updateProgressTable();
+            }
+        });
+
+        socket.on('resume_processed', (data) => {
+            if (data.file_path) {
+                uploadedFiles[data.file_path] = uploadedFiles[data.file_path] || {};
+                uploadedFiles[data.file_path].status = data.status;
+                uploadedFiles[data.file_path].filename = data.filename;
+                if (data.status === 'completed') {
+                    uploadedFiles[data.file_path].data = data.data;
+                } else if (data.status === 'failed') {
+                    uploadedFiles[data.file_path].error = data.error;
+                }
+                updateProgressTable();
+            }
+        });
+
+        document.getElementById('clearStatus').addEventListener('click', () => {
+            uploadedFiles = {};
+            updateProgressTable();
+        });
+    </script>
+</body>
+</html>
