@@ -26,6 +26,9 @@
         .skills-col {
             min-width: 200px;
         }
+        .reason-col {
+            min-width: 300px;
+        }
         tr {
             cursor: pointer;
         }
@@ -113,6 +116,7 @@
                         <th>Predicted Job</th>
                         <th>The Job's Score</th>
                         <th class="skills-col">Skills</th>
+                        <th class="reason-col">Reason for Score</th>
                     </tr>
                 </thead>
                 <tbody id="resultsTable"></tbody>
@@ -254,7 +258,8 @@
                         <td>${resume.email || 'None'}</td>
                         <td>None</td>
                         <td>-</td>
-                        <td>None</td>
+                        <td>${resume.skills || 'None'}</td>
+                        <td>-</td>
                     `;
                     row.addEventListener('click', () => showResume(resume.id, resume.file_path, resume.job_predictions));
                     tbody.appendChild(row);
@@ -272,6 +277,7 @@
                             <td>${job.job || 'None'}</td>
                             <td>${job.score || '-'}</td>
                             <td>${job.skills.join(', ') || 'None'}</td>
+                            <td>${job.Reason || 'No reason provided'}</td>
                         `;
                         row.addEventListener('click', () => showResume(resume.id, resume.file_path, resume.job_predictions));
                         tbody.appendChild(row);
@@ -288,6 +294,7 @@
                         <td>${topJob.job || 'None'}</td>
                         <td>${topJob.score || '-'}</td>
                         <td>${topJob.skills.join(', ') || 'None'}</td>
+                        <td>${topJob.Reason || 'No reason provided'}</td>
                     `;
                     row.addEventListener('click', () => showResume(resume.id, resume.file_path, resume.job_predictions));
                     tbody.appendChild(row);
@@ -352,7 +359,7 @@
             if (job_predictions && job_predictions.length) {
                 jobDetails.innerHTML = '<h6>Job Predictions:</h6><ul>' + 
                     job_predictions.map(j => 
-                        `<li>${j.job}: ${j.score}% (Skills: ${j.skills.join(', ') || 'None'})</li>`
+                        `<li>${j.job}: ${j.score}% (Skills: ${j.skills.join(', ') || 'None'})<br><strong>Reason for Score:</strong> ${j.Reason || 'No reason provided'}</li>`
                     ).join('') + '</ul>';
             } else {
                 jobDetails.innerHTML = '<p>No job predictions available.</p>';
@@ -435,6 +442,7 @@
                             <td>${job.job || 'None'}</td>
                             <td>${job.score || '-'}</td>
                             <td>${job.skills.join(', ') || 'None'}</td>
+                            <td>${job.Reason || 'No reason provided'}</td>
                         `;
                         row.addEventListener('click', () => showResume(data.id, data.file_path, data.job_predictions));
                         tbody.insertBefore(row, tbody.firstChild);
@@ -451,6 +459,7 @@
                         <td>${topJob.job || 'None'}</td>
                         <td>${topJob.score || '-'}</td>
                         <td>${topJob.skills.join(', ') || 'None'}</td>
+                        <td>${topJob.Reason || 'No reason provided'}</td>
                     `;
                     row.addEventListener('click', () => showResume(data.id, data.file_path, data.job_predictions));
                     tbody.insertBefore(row, tbody.firstChild);

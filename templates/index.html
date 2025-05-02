@@ -25,6 +25,9 @@
         .btn-clear {
             margin-left: 10px;
         }
+        .reason-col {
+            min-width: 200px;
+        }
     </style>
 </head>
 <body>
@@ -52,6 +55,7 @@
                         <th>Filename</th>
                         <th>Status</th>
                         <th>Details</th>
+                        <th class="reason-col">Reason for Top Score</th>
                     </tr>
                 </thead>
                 <tbody id="progressTableBody"></tbody>
@@ -138,17 +142,28 @@
             Object.entries(uploadedFiles).forEach(([path, info]) => {
                 const row = document.createElement('tr');
                 let details = '';
+                let reason = '';
                 if (info.status === 'completed' && info.data) {
                     const jobs = info.data.job_predictions && info.data.job_predictions.length ? 
                         info.data.job_predictions.map(j => `${j.job} (${j.score}%)`).join(', ') : 'No predictions';
                     details = `Name: ${info.data.name || 'None'}, Jobs: ${jobs}`;
+                    // Get the top job prediction's reason
+                    if (info.data.job_predictions && info.data.job_predictions.length) {
+                        const topJob = info.data.job_predictions.reduce((max, job) => 
+                            job.score > max.score ? job : max, info.data.job_predictions[0]);
+                        reason = topJob.Reason || 'No reason provided';
+                    }
                 } else if (info.status === 'failed') {
                     details = `Error: ${info.error || 'Unknown'}`;
+                    reason = '-';
+                } else {
+                    reason = '-';
                 }
                 row.innerHTML = `
                     <td>${info.filename}</td>
                     <td>${info.status.charAt(0).toUpperCase() + info.status.slice(1)}</td>
                     <td>${details}</td>
+                    <td>${reason}</td>
                 `;
                 tbody.appendChild(row);
             });

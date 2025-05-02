@@ -94,14 +94,22 @@ def extract_json(response_text):
                 try:
                     parsed = json.loads(json_text)
                     required_fields = ["name", "phone", "email", "skills", "job_predictions"]
-                    if all(field in parsed for field in required_fields):
-                        return parsed
-                    else:
+                    if not all(field in parsed for field in required_fields):
                         return {
                             "error": f"Missing required fields: {', '.join(f for f in required_fields if f not in parsed)}",
                             "raw_output": response_text,
                             "extracted_text": json_text
                         }
+                    # Validate job_predictions structure
+                    for job in parsed.get("job_predictions", []):
+                        job_required_fields = ["job", "score", "skills", "Reason"]
+                        if not all(field in job for field in job_required_fields):
+                            return {
+                                "error": f"Missing required fields in job_predictions: {', '.join(f for f in job_required_fields if f not in job)}",
+                                "raw_output": response_text,
+                                "extracted_text": json_text
+                            }
+                    return parsed
                 except json.JSONDecodeError as e:
                     return {
                         "error": f"Failed to parse extracted JSON: {e}",
@@ -114,14 +122,21 @@ def extract_json(response_text):
         try:
             parsed = json.loads(json_text)
             required_fields = ["name", "phone", "email", "skills", "job_predictions"]
-            if all(field in parsed for field in required_fields):
-                return parsed
-            else:
+            if not all(field in parsed for field in required_fields):
                 return {
                     "error": f"Missing required fields: {', '.join(f for f in required_fields if f not in parsed)}",
                     "raw_output": response_text,
                     "attempted_text": json_text
                 }
+            for job in parsed.get("job_predictions", []):
+                job_required_fields = ["job", "score", "skills", "Reason"]
+                if not all(field in job for field in job_required_fields):
+                    return {
+                        "error": f"Missing required fields in job_predictions: {', '.join(f for f in job_required_fields if f not in job)}",
+                        "raw_output": response_text,
+                        "attempted_text": json_text
+                    }
+            return parsed
         except json.JSONDecodeError as e:
             return {
                 "error": f"Failed to parse after fix attempt: {e}",
@@ -134,16 +149,16 @@ def extract_json(response_text):
     }
 
 def process_resume_with_llama(resume_text):
-    """Predict up to 3 job roles with confidence scores and skills using LLaMA."""
+    """Predict up to 3 job roles with confidence scores, skills, and reasons using LLaMA."""
     prompt = f"""
-Extract details from the resume and predict up to 3 job roles with confidence scores and relevant skills.
+Extract details from the resume and predict up to 3 job roles with confidence scores, relevant skills, and reasons for the scores.
 
 ### *STRICT RULES:*
 - *Output ONLY JSON.* No explanations or extra text.
 - *Ensure valid JSON.* No missing brackets or incorrect structures.
 - *Follow the exact format* without placeholders.
 - If any data is missing, use "None" for strings or [] for lists.
-- *job_predictions* must be a list of up to 3 objects with job, score, and skills.
+- *job_predictions* must be a list of up to 3 objects with job, score, skills, and Reason.
 
 ### *Data Extraction Requirements:*
 - *name:* Extract the full name accurately.
@@ -152,8 +167,9 @@ Extract details from the resume and predict up to 3 job roles with confidence sc
 - *skills:* Extract all skills listed in the resume as a comma-separated string.
 - *job_predictions:* Predict up to 3 job roles from the following list: [Data Scientist, Software Engineer, Product Manager, DevOps Engineer, UX Designer]. Each prediction includes:
   - *job:* The job role.
-  - *score:* Confidence score (0-100) based on skills, experience, and projects.
+  - *score:* Confidence score (0-100) based on skills, experience, and education.
   - *skills:* List of resume skills relevant to this job.
+  - *Reason:* A brief explanation of the score based on skills match (50%), experience (30%), and education/certifications (20%).
 
 ### *Prediction Guidelines:*
 - *Skills Match (50%)* → Match resume skills to job requirements.
@@ -161,6 +177,7 @@ Extract details from the resume and predict up to 3 job roles with confidence sc
 - *Education/Certifications (20%)* → Consider relevant qualifications.
 - *Confidence Scores:* Sum to 100% across predicted jobs if multiple, or 100% for one job.
 - *Skills per Job:* Only include skills from the resume that are relevant to the job.
+- *Reason for Score:* Explain the score breakdown like why you given respective marks. More like a positives of the applicant".
 
 ### *Job Role Skill Requirements:*
 - *Data Scientist:* Python, R, SQL, machine learning, statistics, data analysis.
@@ -179,14 +196,14 @@ Resume Content:
   "email": "<Email or 'None'>",
   "skills": "<Comma-separated skills or 'None'>",
   "job_predictions": [
-    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"]}},
-    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"]}},
-    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"]}}
+    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"], "Reason": "<Explanation of score>"}},
+    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"], "Reason": "<Explanation of score>"}},
+    {{"job": "<Job Role>", "score": <Score 0-100>, "skills": ["<Skill1>", "<Skill2>"], "Reason": "<Explanation of score>"}}
   ]
 }}
     """
 
-    url = "https://late-chairs-search.loca.lt/api/generate"
+    url = "https://shaggy-frogs-fold.loca.lt/api/generate"
     payload = {
         "model": "llama3.1:8b",
         "prompt": prompt
@@ -293,15 +310,16 @@ def save_to_database(resume_data, file_path):
         job_predictions = resume_data.get("job_predictions", [])
         if job_predictions:
             job_query = """
-            INSERT INTO resume_jobs (resume_id, job_role, score, job_skills)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO resume_jobs (resume_id, job_role, score, job_skills, Reason)
+            VALUES (%s, %s, %s, %s, %s)
             """
             for job in job_predictions:
                 job_values = (
                     resume_id,
                     job.get("job", "Unknown"),
                     job.get("score", 0),
-                    ",".join(job.get("skills", [])) if job.get("skills") else "None"
+                    ",".join(job.get("skills", [])) if job.get("skills") else "None",
+                    job.get("Reason", "No reason provided")
                 )
                 cursor.execute(job_query, job_values)
 

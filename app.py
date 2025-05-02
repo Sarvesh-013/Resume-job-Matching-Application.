@@ -133,7 +133,8 @@ def download_csv():
             return jsonify({"error": "Database connection failed"}), 500
         cursor = conn.cursor(dictionary=True)
         query = """
-        SELECT r.id, r.name, r.phone, r.email, r.skills, r.file_path, rj.job_role, rj.score, rj.job_skills
+        SELECT r.id, r.name, r.phone, r.email, r.skills, r.file_path, 
+               rj.job_role, rj.score, rj.job_skills, rj.Reason
         FROM resumes r
         LEFT JOIN resume_jobs rj ON r.id = rj.resume_id
         """
@@ -159,7 +160,8 @@ def download_csv():
                 resume_groups[resume_id]['Jobs'].append({
                     'Job': row['job_role'],
                     'Score': row['score'],
-                    'Job_Skills': row['job_skills']
+                    'Job_Skills': row['job_skills'],
+                    'Reason': row['reason']
                 })
 
         for resume_id, data in resume_groups.items():
@@ -174,6 +176,7 @@ def download_csv():
                 row[f'Job{i}'] = job['Job']
                 row[f'Job{i}_Score'] = job['Score']
                 row[f'Job{i}_Skills'] = job['Job_Skills']
+                row[f'Job{i}_Reason'] = job['Reason']
             df_data.append(row)
 
         df = pd.DataFrame(df_data)
@@ -242,15 +245,16 @@ def store_resume():
         job_predictions = data.get("job_predictions", [])
         if job_predictions:
             job_query = """
-            INSERT INTO resume_jobs (resume_id, job_role, score, job_skills)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO resume_jobs (resume_id, job_role, score, job_skills, Reason)
+            VALUES (%s, %s, %s, %s, %s)
             """
             for job in job_predictions:
                 job_values = (
                     resume_id,
                     job.get("job", "Unknown"),
                     job.get("score", 0),
-                    ",".join(job.get("skills", [])) if job.get("skills") else "None"
+                    ",".join(job.get("skills", [])) if job.get("skills") else "None",
+                    job.get("Reason", "No reason provided")
                 )
                 cursor.execute(job_query, job_values)
 
@@ -286,7 +290,7 @@ def get_resumes():
         # Build query
         query = """
         SELECT r.id, r.name, r.phone, r.email, r.skills, r.file_path,
-               rj.job_role, rj.score, rj.job_skills
+               rj.job_role, rj.score, rj.job_skills, rj.Reason
         FROM resumes r
         LEFT JOIN resume_jobs rj ON r.id = rj.resume_id
         WHERE 1=1
@@ -349,7 +353,8 @@ def get_resumes():
                 resumes[resume_id]['job_predictions'].append({
                     'job': row['job_role'],
                     'score': row['score'],
-                    'skills': row['job_skills'].split(',') if row['job_skills'] and row['job_skills'] != 'None' else []
+                    'skills': row['job_skills'].split(',') if row['job_skills'] and row['job_skills'] != 'None' else [],
+                    'Reason': row['Reason']
                 })
 
         resume_list = list(resumes.values())
