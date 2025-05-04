@@ -13,6 +13,9 @@ import socketio
 import requests
 import time
 import ollama
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -272,10 +275,10 @@ Resume Content:
 def save_to_database(resume_data, file_path):
     try:
         conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="sarvesh#13",
-            database="resume_job_db"
+            host=os.getenv("host"),
+            user=os.getenv("user"),
+            password=os.getenv("password"),
+            database=os.getenv("database"),
         )
         cursor = conn.cursor()
 

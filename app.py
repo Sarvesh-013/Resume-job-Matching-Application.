@@ -37,10 +37,10 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # MySQL Database Configuration
 DB_CONFIG = {
-    "host": os.getenv("host", "localhost"),
-    "user": os.getenv("user", "root"),
-    "password": os.getenv("password", "sarvesh#13"),
-    "database": os.getenv("database", "resume_db")
+    "host": os.getenv("host"),
+    "user": os.getenv("user"),
+    "password": os.getenv("password"),
+    "database": os.getenv("database")
 }
 
 def get_db_connection():
